@@ -1,0 +1,9 @@
+tmp/
+text.txt
+test.txt
+/**/train
+/**/dev
+/**/test
+/**/__pycache__
+*.zip
+*.gz
