@@ -312,7 +312,7 @@ class Trainer:
 
         self.logger.info('Num words in source = %d and target = %d' % (len(self.src_dict), len(self.tgt_dict)))
         # Initialize model
-        with open(args.data_dir + 'action_vocab.txt', 'rb+') as f:
+        with open(args.data_dir + args.dataset_name[0] + '/action_vocab.txt', 'rb+') as f:
             action_word_list = pickle.load(f)
         self.action_word_map = {}
         size = 0
@@ -323,7 +323,7 @@ class Trainer:
                 size += 1
         self.action_word_re = get_action_word_list(self.action_word_map, self.tgt_dict)
 
-        with open(args.data_dir + 'argument_vocab.txt', 'rb+') as f:
+        with open(args.data_dir + args.dataset_name[0] + '/argument_vocab.txt', 'rb+') as f:
             argument_word_list = pickle.load(f)
         self.argument_word_map = {}
         size = 0
@@ -588,11 +588,11 @@ class Trainer:
         self.discriminator.train()
         self.generator.train()
         start = time.time()
-        loss_discriminator_collect = []
         loss_generator_collect = []
         loss_lm_rl_collect = []
         loss_vh_rl_collect = []
         for step, data in enumerate(self.train_loader):
+            
             batch_size = data['code_len'].shape[0]
 
             loss_lm, output, p_act, loss_vh = self.generator(data)
@@ -627,12 +627,8 @@ class Trainer:
             bleu4_metric = []
             bleu = BLEU(n_grams=[1, 2, 3, 4])
             for i in range(batch_size):
-                # print(question_str[i])
-                # print(sentence_baseline[i])
                 bleu4_baseline, _ = bleu.calculate_scores(ground_truth=[question_str[i]], predict=[sentence_baseline[i]])
                 bleu4_explore, _ = bleu.calculate_scores(ground_truth=[question_str[i]], predict=[sentence_explore[i]])
-                # print(bleu4_baseline)
-                # print(bleu4_explore)
                 reward = bleu4_explore[3] - bleu4_baseline[3]
                 bleu4_metric.append(reward * 100)
                 
@@ -667,12 +663,10 @@ class Trainer:
                     np.mean(loss_generator_collect), np.mean(loss_lm_rl_collect),
                     np.mean(loss_vh_rl_collect), float(lr), end - start))
                 
-                loss_discriminator_collect = []
                 loss_generator_collect = []
                 loss_lm_rl_collect = []
                 loss_vh_rl_collect = []
                 start = time.time()
-              #  self.evaluate_generator(self.train_loader, 'train', epoch=-1)  
 
 
     def evaluate_discriminator(self, dataloader, mode, epoch):

@@ -69,7 +69,7 @@ if __name__ == '__main__':
     s =  ['return', 'returns', 'set', 'get', 'add', 'create', 'initialize', 'test', 'remove', 'check', 'is', 'call', 'retrieve', 'update', 'automate', 'write', 'determine', 'read', 'handle', 'to', 'if', 'insert', 'describe', 'use', 'load', 'delete', 'convert', 'start', 'clear', 'print', 'find', 'reset', 'save', 'send', 'generate', 'close', 'compare', 'indicate', 'perform', 'change', 'show']
     s = set(s)
     nlp = spacy.load("en_core_web_sm")
-    with open('/home/hj/ActionWordCodeSum/data/python/train/javadoc.original') as f:
+    with open('/home/hj/ActionWordCodeSum/data/java/train/javadoc.original') as f:
         for lines in tqdm.tqdm(f.readlines()):
             doc = nlp(lines)
             for ind, tokens in enumerate(doc):
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     print(len(s))
     s = list(s)
     s = ['null'] + s 
-    with open('data/action_vocab.txt', 'wb') as f:
+    with open('data/java/action_vocab.txt', 'wb') as f:
         pickle.dump(s, f)
 
     
