@@ -271,7 +271,7 @@ class SummarizationGenerator(nn.Module):
             if sampling:
                 top1 = torch.multinomial(torch.exp(logprob), 1).squeeze(1)
             else:
-                top1 = decoder_output.argmax(1).detach()
+                top1 = logprob.argmax(1).detach()
             teacher_force = random.random() < teacher_forcing_ratio
             res[i] = top1
             if teacher_forcing_ratio == 0:
