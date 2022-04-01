@@ -57,16 +57,12 @@ def pg_loss(prob, gt, reward):
     assert len(prob.shape) == 3
     assert len(gt.shape) == 2
     assert prob.shape[0:2] == gt.shape[0:2]
-    mask = 1 - gt.data.eq(2).float()
-    pad = mask.data.new(gt.shape[0], 1).fill_(1)
-    mask = torch.cat((pad, mask[:, :-1]), dim=1)
-
+    mask = 1 - gt.data.eq(0).float()
     prob_select = torch.gather(prob.contiguous().view(batch_size*step, -1), 1, gt.contiguous().view(-1, 1))
     
     prob_select = prob_select.view_as(gt)
     prob_select.masked_fill_(mask=(1 - mask).bool(), value=0)
     loss = - torch.sum(prob_select*reward.unsqueeze(1)) / prob_select.shape[0]
-    # print(loss)
     return loss
 
 
@@ -308,7 +304,8 @@ class Trainer:
                                                 fields=['summary'],
                                                 dict_size=self.args.tgt_vocab_size,
                                                 no_special_token=False)
-
+        print(self.tgt_dict['</s>'])
+        print('!!!!!!!!!!!!!!!!!!')
         self.logger.info('Num words in source = %d and target = %d' % (len(self.src_dict), len(self.tgt_dict)))
         # Initialize model
         with open(args.data_dir + args.dataset_name[0] + '/action_vocab.txt', 'rb+') as f:
@@ -562,7 +559,7 @@ class Trainer:
        
         if self.args.checkpoint:
             self.load_pretrain_generator(epoch=2, save_dir=self.args.model_dir, name="python-discriminator")
-        self.evaluate_generator(dev_loader, 'dev', epoch=-1)
+        #self.evaluate_generator(dev_loader, 'dev', epoch=-1)
 
     def test(self, train_loader, dev_loader):
         best_bleu = -1

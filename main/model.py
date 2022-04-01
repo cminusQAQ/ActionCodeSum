@@ -247,7 +247,7 @@ class SummarizationGenerator(nn.Module):
         decoder_input = summ_word_rep[0]
         loss = 0
         res = torch.zeros(len, batch_size, dtype=torch.int64).to(self.device)
-        vis = torch.ones(len, batch_size, dtype=torch.double).to(self.device)
+        vis = torch.ones(batch_size, self.args.tgt_vocab_size, dtype=torch.double).to(self.device)
         for i in range(1, len):
             decoder_input = self.decoder_embedder(decoder_input.unsqueeze(1))
 
@@ -264,12 +264,13 @@ class SummarizationGenerator(nn.Module):
                                                 memory_bank,
                                                 src_len)
             
+            decoder_output = decoder_output / vis.clone()
             logprob = torch.log_softmax(decoder_output, dim=-1)
             output[i] = decoder_output
             if sampling:
                 top1 = torch.multinomial(torch.exp(logprob), 1).squeeze(1)
             else:
-                top1 = decoder_output.argmax(1).detach()
+                top1 = logprob.argmax(1).detach()
             teacher_force = random.random() < teacher_forcing_ratio
             res[i] = top1
             if teacher_forcing_ratio == 0:
@@ -277,7 +278,8 @@ class SummarizationGenerator(nn.Module):
             if sampling:
                 assert teacher_force == False
             decoder_input = summ_word_rep[i] if teacher_force else top1
-
+            for i in range(batch_size):
+                vis[i][decoder_input[i].item()] /= 1.2
 
 
         loss = self.criterion(output.reshape(batch_size * len, self.args.tgt_vocab_size),
@@ -334,7 +336,7 @@ class SummarizationGenerator(nn.Module):
         decoder_input = summ_word_rep[0]
         res = torch.zeros(len, batch_size, dtype=torch.int64).to(self.device)
         output = torch.zeros(len, batch_size, self.args.tgt_vocab_size).to(self.device)
-
+        vis = torch.ones(batch_size, self.args.tgt_vocab_size, dtype=torch.double).to(self.device)
         for i in range(1, len):
             decoder_input = self.decoder_embedder(decoder_input.unsqueeze(1))
 
@@ -350,10 +352,13 @@ class SummarizationGenerator(nn.Module):
                                                 s,
                                                 memory_bank,
                                                 src_len)
+            decoder_output = decoder_output / vis.clone()
             output[i] = decoder_output
             top1 = decoder_output.argmax(1).detach()
             res[i] = top1
             decoder_input = top1
+            for i in range(batch_size):
+                vis[i][decoder_input[i].item()] /= 1.2
 
         res = res.transpose(0, 1)
         pred = []
