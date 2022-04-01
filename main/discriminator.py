@@ -4,7 +4,6 @@ from model import Attention
 import torch
 import torch.nn as nn
 
-
 class Discriminator(nn.Module):
     def __init__(self, args, re_act_size, device):
         super().__init__()

@@ -73,7 +73,7 @@ if __name__ == '__main__':
         for lines in tqdm.tqdm(f.readlines()):
             doc = nlp(lines)
             for ind, tokens in enumerate(doc):
-                if tokens.tag_[:2] == 'VB':
+                if tokens.tag_[:2] == 'VB' and tokens.text != 'null':
                     s.add(tokens.text)
                     break
                 if ind >= 3:

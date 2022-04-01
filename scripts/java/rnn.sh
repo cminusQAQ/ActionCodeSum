@@ -23,6 +23,7 @@ echo "============TRAINING============"
 
 RGPU=$1
 MODEL_NAME=$2
+SAVE=$3
 
 PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/train.py \
 --data_workers 5 \
@@ -39,12 +40,13 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --use_src_char False \
 --use_tgt_word True \
 --use_tgt_char False \
---max_src_len 150 \
---max_tgt_len 50 \
+--max_src_len 400 \
+--max_tgt_len 30 \
 --emsize 512 \
 --fix_embeddings False \
 --src_vocab_size 50000 \
 --tgt_vocab_size 30000 \
+--ctype generator_only \
 --share_decoder_embeddings True \
 --conditional_decoding False \
 --max_examples -1 \
@@ -54,11 +56,10 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --model_type rnn \
 --nhid 512 \
 --nlayers 2 \
---use_all_enc_layers False \
 --dropout_rnn 0.2 \
 --dropout_emb 0.2 \
 --dropout 0.2 \
---copy_attn True \
+--copy_attn False \
 --reuse_copy_attn True \
 --early_stop 20 \
 --optimizer adam \
@@ -66,8 +67,9 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --lr_decay 0.99 \
 --grad_clipping 5.0 \
 --valid_metric bleu \
---checkpoint True
-
+--checkpoint $SAVE \
+--generator_pretrain_epoch 100 \
+--discriminator_pretrain_epoch 1
 }
 
 function test () {
@@ -126,6 +128,4 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 
 }
 
-train $1 $2
-test $1 $2
-beam_search $1 $2
+train $1 $2 $3

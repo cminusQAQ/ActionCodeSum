@@ -187,7 +187,7 @@ class SummarizationGenerator(nn.Module):
         self.fc = nn.Linear(args.nhid * 2, args.nhid)
         self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, ex, teacher_forcing_ratio=1, sampling=False):
+    def forward(self, ex, teacher_forcing_ratio=1, sampling=False, beam_search=False):
         '''
             Output:
                 if sampling:
@@ -247,7 +247,7 @@ class SummarizationGenerator(nn.Module):
         decoder_input = summ_word_rep[0]
         loss = 0
         res = torch.zeros(len, batch_size, dtype=torch.int64).to(self.device)
-
+        vis = torch.ones(len, batch_size, dtype=torch.double).to(self.device)
         for i in range(1, len):
             decoder_input = self.decoder_embedder(decoder_input.unsqueeze(1))
 
@@ -277,6 +277,7 @@ class SummarizationGenerator(nn.Module):
             if sampling:
                 assert teacher_force == False
             decoder_input = summ_word_rep[i] if teacher_force else top1
+
 
 
         loss = self.criterion(output.reshape(batch_size * len, self.args.tgt_vocab_size),

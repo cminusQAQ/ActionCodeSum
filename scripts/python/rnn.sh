@@ -46,7 +46,7 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --fix_embeddings False \
 --src_vocab_size 50000 \
 --tgt_vocab_size 30000 \
---ctype generator_only \
+--ctype discriminator \
 --share_decoder_embeddings True \
 --conditional_decoding False \
 --max_examples -1 \
@@ -68,8 +68,8 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --grad_clipping 5.0 \
 --valid_metric bleu \
 --checkpoint $SAVE \
---generator_pretrain_epoch 100 \
---discriminator_pretrain_epoch 1
+--generator_pretrain_epoch 0 \
+--discriminator_pretrain_epoch 0
 }
 
 function test () {

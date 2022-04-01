@@ -37,7 +37,6 @@ from c2nl.eval.rouge import Rouge
 from c2nl.eval.meteor import Meteor
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 def str2bool(v):
     return v.lower() in ('yes', 'true', 't', '1', 'y')
 
@@ -58,14 +57,14 @@ def pg_loss(prob, gt, reward):
     assert len(prob.shape) == 3
     assert len(gt.shape) == 2
     assert prob.shape[0:2] == gt.shape[0:2]
-    # mask = 1 - gt.data.eq(2).float()
-    # pad = mask.data.new(gt.shape[0], 1).fill_(1)
-    # mask = torch.cat((pad, mask[:, :-1]), dim=1)
+    mask = 1 - gt.data.eq(2).float()
+    pad = mask.data.new(gt.shape[0], 1).fill_(1)
+    mask = torch.cat((pad, mask[:, :-1]), dim=1)
 
     prob_select = torch.gather(prob.contiguous().view(batch_size*step, -1), 1, gt.contiguous().view(-1, 1))
     
     prob_select = prob_select.view_as(gt)
-    # prob_select.masked_fill_(mask=(1 - mask).bool(), value=0)
+    prob_select.masked_fill_(mask=(1 - mask).bool(), value=0)
     loss = - torch.sum(prob_select*reward.unsqueeze(1)) / prob_select.shape[0]
     # print(loss)
     return loss
@@ -502,7 +501,7 @@ class Trainer:
         loss_adv_collect = []
         for step, data in enumerate(self.train_loader):
 
-            logit, output, p_act, loss_vh = self.generator(data, teacher_forcing_ratio=0, sampling=True)
+            logit, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data, teacher_forcing_ratio=0, sampling=True)
             
             # real
             labels = torch.ones(data['code_word_rep'].shape[0]).to(device)
@@ -562,7 +561,7 @@ class Trainer:
  
        
         if self.args.checkpoint:
-            self.load_pretrain_generator(epoch=75, save_dir=self.args.model_dir, name="generator-final")
+            self.load_pretrain_generator(epoch=2, save_dir=self.args.model_dir, name="python-discriminator")
         self.evaluate_generator(dev_loader, 'dev', epoch=-1)
 
     def test(self, train_loader, dev_loader):
@@ -595,15 +594,15 @@ class Trainer:
             
             batch_size = data['code_len'].shape[0]
 
-            loss_lm, output, p_act, loss_vh = self.generator(data)
+            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data)
             
             loss_first = (loss_lm + loss_vh * 0.1) * 0.2
             self.generator_optimizer.zero_grad()
-            loss_first.backward()
+            #loss_first.backward()
             
             # baseline: 
             with torch.no_grad():
-                _, res, p_act, loss_aw = self.generator(data, teacher_forcing_ratio=0)
+                _, res, p_act, loss_aw, p_ag, loss_ag = self.generator(data, teacher_forcing_ratio=0)
                 sentence_baseline = self.convert(res)
             
                 logit = self.discriminator(data['code_word_rep'].to(device),
@@ -612,7 +611,7 @@ class Trainer:
                 reward_cons_baseline = torch.sigmoid(logit)
             
             # explore
-            logits, res, p_act, loss_vh_rl = self.generator(data, teacher_forcing_ratio=0, sampling=True)
+            logits, res, p_act, loss_vh_rl, p_ag, loss_ag = self.generator(data, teacher_forcing_ratio=0, sampling=True)
             sentence_explore = self.convert(res)
             with torch.no_grad():
                 logit = self.discriminator(data['code_word_rep'].to(device),
@@ -630,22 +629,25 @@ class Trainer:
                 bleu4_baseline, _ = bleu.calculate_scores(ground_truth=[question_str[i]], predict=[sentence_baseline[i]])
                 bleu4_explore, _ = bleu.calculate_scores(ground_truth=[question_str[i]], predict=[sentence_explore[i]])
                 reward = bleu4_explore[3] - bleu4_baseline[3]
-                bleu4_metric.append(reward * 100)
+                bleu4_metric.append(reward)
                 
             reward_bleu = torch.Tensor(bleu4_metric).to(device)
                 
 
             reward_bleu_norm = reward_bleu
             reward_cons_norm = reward_cons
-            reward = reward_bleu_norm + reward_cons_norm.detach() * 0.5
+            # reward = reward_bleu_norm + reward_cons_norm.detach() * 0.5
             # print(reward)
+            reward = reward_bleu_norm.detach()
 
             loss_lm_rl = pg_loss(prob=logits, gt=res.detach(), reward=reward.detach())
 
             loss_vh_rl = torch.mean(loss_vh_rl * reward.detach())
-            loss_gen = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1*0.1) + 0.2 * loss_first
+            #loss_gen = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1*0.1) + 0.2 * loss_first
 
-            loss2 = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1 * 0.1)
+            #loss2 = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1 * 0.1)
+            loss2 = loss_lm_rl
+            loss_gen = loss2
             loss2.backward()
 
             self.generator_optimizer.step()
