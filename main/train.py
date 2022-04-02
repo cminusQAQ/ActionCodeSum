@@ -545,8 +545,8 @@ class Trainer:
     def train_generator(self, train_loader, dev_loader):
         best_bleu = 0
         best_epoch = 0
-       #  self.load_pretrain_generator(epoch=1, save_dir=self.args.model_dir)
-        for epoch in range(self.args.generator_pretrain_epoch):
+        self.load_pretrain_generator(epoch=33, save_dir=self.args.model_dir, name="python-ag-aw")
+        for epoch in range(34, self.args.generator_pretrain_epoch):
             self.pretrain_generator(dataloader=train_loader, epoch=epoch,
                             lr=self.args.learning_rate)
             res = self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
