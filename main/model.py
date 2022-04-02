@@ -187,7 +187,7 @@ class SummarizationGenerator(nn.Module):
         self.fc = nn.Linear(args.nhid * 2, args.nhid)
         self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, ex, teacher_forcing_ratio=1, sampling=False, beam_search=False):
+    def forward(self, ex, teacher_forcing_ratio=0.5, sampling=False, beam_search=False):
         '''
             Output:
                 if sampling:
@@ -208,6 +208,8 @@ class SummarizationGenerator(nn.Module):
         batch_size = code_word_rep.shape[0]
         h_act = None
         loss_act = 0
+        h_ag = None
+        loss_act = 0
         # Run forward
         if self.type != 'seq2seq':
             p, loss_act = self.word_pred(ex)
@@ -227,9 +229,7 @@ class SummarizationGenerator(nn.Module):
                 for j in range(self.re_act_size):
                     h_ag[i][j] = self.argument_word_re[index[i][j]]
             emb_ag = self.decoder_embedder(h_ag)
-            
-                
-        
+                 
         # B x action_vacab_size
         code_rep = self.encoder_embedder(code_word_rep)
 
@@ -264,7 +264,7 @@ class SummarizationGenerator(nn.Module):
                                                 memory_bank,
                                                 src_len)
             
-            decoder_output = decoder_output / vis.clone()
+            decoder_output = decoder_output * vis.clone()
             logprob = torch.log_softmax(decoder_output, dim=-1)
             output[i] = decoder_output
             if sampling:
@@ -299,6 +299,8 @@ class SummarizationGenerator(nn.Module):
         batch_size = code_word_rep.shape[0]
         h_act = None
         loss_act = 0
+        h_ag = None
+        loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
             p, loss_act = self.word_pred(ex)

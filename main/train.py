@@ -356,6 +356,8 @@ class Trainer:
                     'optimizer_state_dict': self.generator_optimizer.state_dict(),
                     'action_word_re': self.action_word_re,
                     'action_word_map': self.action_word_map,
+                    'argument_word_re': self.argument_word_re,
+                    'argument_word_map': self.argument_word_map,
                     'src_dict': self.src_dict, 
                     'tgt_dict': self.tgt_dict
                    }, model_name)
@@ -368,6 +370,8 @@ class Trainer:
         self.generator_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.generator.action_word_map = checkpoint['action_word_map']
         self.generator.action_word_re = checkpoint['action_word_re']
+        self.generator.argument_word_map = checkpoint['argument_word_map']
+        self.generator.argument_word_re = checkpoint['argument_word_re']
         self.generator.src_dict = self.src_dict = checkpoint['src_dict']
         self.generator.tgt_dict = self.tgt_dict = checkpoint['tgt_dict']
         self.generator.eval()
@@ -422,12 +426,10 @@ class Trainer:
         
             loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data)
 
-            loss = loss_lm + loss_vh * 0.5 + loss_ag * 0.5
+            loss = loss_lm + loss_vh * 0.1 + loss_ag * 0.1
             self.generator_optimizer.zero_grad()
             loss.backward()
-            # for name, i in self.generator.named_parameters():
-            #     if i.requires_grad:
-            #         print(name, ' ', i)
+
             self.generator_optimizer.step()
             
             loss_generator_collect.append(loss.item())
@@ -472,6 +474,8 @@ class Trainer:
                 bleu = BLEU(n_grams=[1, 2, 3, 4])
                 bl, _ = bleu.calculate_scores(ground_truth=lab, predict=pred)
                 bl_total.append(bl[3])
+                if idx >= 100:
+                    break
                 # rouge = ROUGE()
                 # rg, _ = rouge.calculate_scores(ground_truth=lab, predict=pred)
                 # rg_total.append(rg)
@@ -558,8 +562,8 @@ class Trainer:
  
        
         if self.args.checkpoint:
-            self.load_pretrain_generator(epoch=2, save_dir=self.args.model_dir, name="python-discriminator")
-        #self.evaluate_generator(dev_loader, 'dev', epoch=-1)
+            self.load_pretrain_generator(epoch=13, save_dir=self.args.model_dir, name="python-ag-aw")
+        self.evaluate_generator(dev_loader, 'dev', epoch=-1)
 
     def test(self, train_loader, dev_loader):
         best_bleu = -1
@@ -666,6 +670,7 @@ class Trainer:
                 loss_lm_rl_collect = []
                 loss_vh_rl_collect = []
                 start = time.time()
+                break
 
 
     def evaluate_discriminator(self, dataloader, mode, epoch):
@@ -809,9 +814,8 @@ class Trainer:
         self.logger.info('-' * 100)
         start_epoch = 1
         self.init_from_scratch(train_exs, dev_exs)
-        parameters = [p for p in self.generator.parameters() if p.requires_grad]
 
-        self.generator_optimizer = optim.Adam(parameters, lr=1e-3)
+        self.generator_optimizer = optim.Adam(self.generator.parameters(), lr=2e-5)
         self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
 
         if os.path.exists(self.args.data_dir + self.args.dataset_name[0] + '/train/train_action_word.txt'):
