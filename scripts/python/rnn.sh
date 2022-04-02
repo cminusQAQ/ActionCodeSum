@@ -68,7 +68,7 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --grad_clipping 5.0 \
 --valid_metric bleu \
 --checkpoint $SAVE \
---generator_pretrain_epoch 0 \
+--generator_pretrain_epoch 100 \
 --discriminator_pretrain_epoch 0
 }
 
