@@ -474,8 +474,6 @@ class Trainer:
                 bleu = BLEU(n_grams=[1, 2, 3, 4])
                 bl, _ = bleu.calculate_scores(ground_truth=lab, predict=pred)
                 bl_total.append(bl[3])
-                if idx >= 100:
-                    break
                 # rouge = ROUGE()
                 # rg, _ = rouge.calculate_scores(ground_truth=lab, predict=pred)
                 # rg_total.append(rg)
@@ -670,7 +668,6 @@ class Trainer:
                 loss_lm_rl_collect = []
                 loss_vh_rl_collect = []
                 start = time.time()
-                break
 
 
     def evaluate_discriminator(self, dataloader, mode, epoch):
@@ -815,7 +812,7 @@ class Trainer:
         start_epoch = 1
         self.init_from_scratch(train_exs, dev_exs)
 
-        self.generator_optimizer = optim.Adam(self.generator.parameters(), lr=2e-5)
+        self.generator_optimizer = optim.Adam(self.generator.parameters(), lr=5e-4)
         self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
 
         if os.path.exists(self.args.data_dir + self.args.dataset_name[0] + '/train/train_action_word.txt'):
