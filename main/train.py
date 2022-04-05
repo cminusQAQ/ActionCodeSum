@@ -635,18 +635,14 @@ class Trainer:
 
             reward_bleu_norm = reward_bleu
             reward_cons_norm = reward_cons
-            # reward = reward_bleu_norm + reward_cons_norm.detach() * 0.5
-            # print(reward)
-            reward = reward_bleu_norm.detach()
+            reward = reward_bleu_norm + reward_cons_norm.detach() * 0.5
 
             loss_lm_rl = pg_loss(prob=logits, gt=res.detach(), reward=reward.detach())
 
             loss_vh_rl = torch.mean(loss_vh_rl * reward.detach())
-            #loss_gen = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1*0.1) + 0.2 * loss_first
+            loss_gen = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1*0.1) + 0.2 * loss_first
 
-            #loss2 = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1 * 0.1)
-            loss2 = loss_lm_rl
-            loss_gen = loss2
+            loss2 = 0.8 * ( loss_lm_rl + loss_vh_rl*0.1 * 0.1)
             loss2.backward()
 
             self.generator_optimizer.step()
