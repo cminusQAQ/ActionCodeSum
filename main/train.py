@@ -271,7 +271,7 @@ class Trainer:
     def convert(self, tokens):
         pred = []
         for i in range(tokens.shape[0]):
-            batch_output = '<s>'
+            batch_output = '<s> '
             for j in range(1, tokens.shape[1]):
                 batch_output += self.tgt_dict[tokens[i][j].item()] + ' '
                 if self.tgt_dict[tokens[i][j].item()] == '</s>':
@@ -545,8 +545,8 @@ class Trainer:
     def train_generator(self, train_loader, dev_loader):
         best_bleu = 0
         best_epoch = 0
-        self.load_pretrain_generator(epoch=33, save_dir=self.args.model_dir, name="python-ag-aw")
-        for epoch in range(34, self.args.generator_pretrain_epoch):
+        #self.load_pretrain_generator(epoch=33, save_dir=self.args.model_dir, name="python-ag-aw")
+        for epoch in range(1, self.args.generator_pretrain_epoch):
             self.pretrain_generator(dataloader=train_loader, epoch=epoch,
                             lr=self.args.learning_rate)
             res = self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
@@ -560,26 +560,7 @@ class Trainer:
  
        
         if self.args.checkpoint:
-            self.load_pretrain_generator(epoch=13, save_dir=self.args.model_dir, name="python-ag-aw")
-        self.evaluate_generator(dev_loader, 'dev', epoch=-1)
-
-    def test(self, train_loader, dev_loader):
-        best_bleu = -1
-        best_epoch = -1
-        self.load_pretrain_generator(epoch=21, save_dir=self.args.model_dir)
-        for epoch in range(1):
-            # self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
-            self.pretrain_generator(dataloader=train_loader, epoch=epoch,
-                            lr=self.args.learning_rate)
-            res = self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
-            if best_bleu < res:
-
-                best_bleu = res
-                best_epoch = epoch
-                self.logger.info("BLEU metric enhanced !!!!")
-                self.save_generator(save_dir=self.args.model_dir, epoch=epoch)
-                    
-        self.load_pretrain_generator(epoch=53, save_dir=self.args.model_dir)
+            self.load_pretrain_generator(epoch=best_epoch, save_dir=self.args.model_dir, name="python-ag-aw")
         self.evaluate_generator(dev_loader, 'dev', epoch=-1)
 
     def train_generator_pg(self, epoch, lr):

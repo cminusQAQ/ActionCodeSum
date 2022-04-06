@@ -209,7 +209,7 @@ class SummarizationGenerator(nn.Module):
         h_act = None
         loss_act = 0
         h_ag = None
-        loss_act = 0
+        loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
             p, loss_act = self.word_pred(ex)
@@ -354,7 +354,7 @@ class SummarizationGenerator(nn.Module):
                                                 s,
                                                 memory_bank,
                                                 src_len)
-            decoder_output = decoder_output / vis.clone()
+            decoder_output = decoder_output * vis.clone()
             output[i] = decoder_output
             top1 = decoder_output.argmax(1).detach()
             res[i] = top1
