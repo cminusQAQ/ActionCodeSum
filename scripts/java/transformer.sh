@@ -23,6 +23,7 @@ echo "============TRAINING============"
 
 RGPU=$1
 MODEL_NAME=$2
+SAVE=$3
 
 PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/train.py \
 --data_workers 5 \
@@ -71,7 +72,9 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --lr_decay 0.99 \
 --valid_metric bleu \
 --checkpoint True \
---split_decoder False
+--split_decoder False \
+--generator_pretrain_epoch 100 \
+--discriminator_pretrain_epoch 1 \
 }
 
 function test () {
@@ -130,6 +133,4 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 
 }
 
-train $1 $2
-test $1 $2
-beam_search $1 $2
+train $1 $2 $3

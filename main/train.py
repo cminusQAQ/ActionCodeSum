@@ -27,14 +27,12 @@ from tqdm import tqdm
 from c2nl.inputters.timer import AverageMeter, Timer
 import c2nl.inputters.vector as vector
 import c2nl.inputters.dataset as data
-from graph4nlp.pytorch.modules.evaluation import BLEU, ROUGE, METEOR
+from c2nl.eval.bleu import compute_bleu
 
 from preprocession import get_action_word_list, get_h_act, get_argument_word_list, get_h_argument
-from main.model import SummarizationGenerator, ActionWordGenerate
-from discriminator import Discriminator
-from c2nl.eval.bleu import corpus_bleu
-from c2nl.eval.rouge import Rouge
-from c2nl.eval.meteor import Meteor
+# from main.model import SummarizationGenerator
+#from main.transformer import SummarizationGenerator
+from main.qwq import SummarizationGenerator
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def str2bool(v):
@@ -271,11 +269,11 @@ class Trainer:
     def convert(self, tokens):
         pred = []
         for i in range(tokens.shape[0]):
-            batch_output = '<s> '
+            batch_output = ''
             for j in range(1, tokens.shape[1]):
-                batch_output += self.tgt_dict[tokens[i][j].item()] + ' '
                 if self.tgt_dict[tokens[i][j].item()] == '</s>':
                     break
+                batch_output += self.tgt_dict[tokens[i][j].item()] + ' '
             pred.append(batch_output)
         return pred
 
@@ -284,7 +282,7 @@ class Trainer:
         for i in tokens:
             s = ''
             for j in i:
-                #if j != '<s>' and j != '</s>':
+                if j != '<s>' and j != '</s>':
                     s += j + ' '
             pred.append(s)
         return pred
@@ -304,8 +302,6 @@ class Trainer:
                                                 fields=['summary'],
                                                 dict_size=self.args.tgt_vocab_size,
                                                 no_special_token=False)
-        print(self.tgt_dict['</s>'])
-        print('!!!!!!!!!!!!!!!!!!')
         self.logger.info('Num words in source = %d and target = %d' % (len(self.src_dict), len(self.tgt_dict)))
         # Initialize model
         with open(args.data_dir + args.dataset_name[0] + '/action_vocab.txt', 'rb+') as f:
@@ -329,21 +325,16 @@ class Trainer:
                 self.argument_word_map[size] = w
                 size += 1
         self.argument_word_re = get_argument_word_list(self.argument_word_map, self.tgt_dict)
-        self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict,
-                                        self.action_word_re, 
-                                        self.action_word_map, 
-                                        self.argument_word_re,
-                                        self.argument_word_map,
-                                        self.args.ctype, device, 1).to(device)
+        self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict)
 
-        for name, param in self.generator.named_parameters():
-            if 'weight' in name:
-                nn.init.orthogonal(param)
+        # for name, param in self.generator.named_parameters():
+        #     if 'weight' in name:
+        #         nn.init.orthogonal(param)
         
-        self.discriminator = Discriminator(config.get_model_args(self.args), 1, device).to(device)
-        for name, param in self.discriminator.named_parameters():
-            if 'weight' in name:
-                nn.init.orthogonal(param)
+        # self.discriminator = Discriminator(config.get_model_args(self.args), 1, device).to(device)
+        # for name, param in self.discriminator.named_parameters():
+        #     if 'weight' in name:
+        #         nn.init.orthogonal(param)
 
         
     def save_generator(self, save_dir, epoch):
@@ -412,7 +403,7 @@ class Trainer:
     #             start = time.time()
     
     def pretrain_generator(self, dataloader, epoch, lr):
-        self.generator.train()
+        self.generator.network.train()
 
         start = time.time()
         num_batches = len(dataloader.dataset) // self.args.batch_size
@@ -424,9 +415,9 @@ class Trainer:
 
         for step, data in enumerate(dataloader):
         
-            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data)
+            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator.update(data)
 
-            loss = loss_lm + loss_vh * 0.1 + loss_ag * 0.1
+            loss = loss_lm
             self.generator_optimizer.zero_grad()
             loss.backward()
 
@@ -456,7 +447,7 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate_generator(self, data_loader, mode, epoch):
-        self.generator.eval()
+        self.generator.network.eval()
         eval_time = Timer()
         bl_total = []
         rg_total = []
@@ -464,16 +455,14 @@ class Trainer:
         with torch.no_grad():
             pbar = tqdm(data_loader)
             for idx, ex in enumerate(pbar):
-                pred = self.generator.predict(ex)
-                pred = self.constring(pred)
+                pred = self.generator.predict(ex, replace_unk=True)
                 lab = self.constring(ex['summ_tokens'])
                 for i, j in zip(pred, lab):
                     with open('text.txt', 'w+') as f:
                         print('test: ', i, file=f)
                         print('truth:', j, file=f)
-                bleu = BLEU(n_grams=[1, 2, 3, 4])
-                bl, _ = bleu.calculate_scores(ground_truth=lab, predict=pred)
-                bl_total.append(bl[3])
+                bleu = compute_bleu([lab], [pred], smooth=True)[0]
+                bl_total.append(bleu)
                 # rouge = ROUGE()
                 # rg, _ = rouge.calculate_scores(ground_truth=lab, predict=pred)
                 # rg_total.append(rg)
@@ -789,8 +778,9 @@ class Trainer:
         start_epoch = 1
         self.init_from_scratch(train_exs, dev_exs)
 
-        self.generator_optimizer = optim.Adam(self.generator.parameters(), lr=5e-4)
-        self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
+        self.generator_optimizer = optim.Adam(self.generator.network.parameters(), lr=self.args.learning_rate)
+        # print(self.generator.parameters())
+        # self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
 
         if os.path.exists(self.args.data_dir + self.args.dataset_name[0] + '/train/train_action_word.txt'):
             with open(self.args.data_dir + self.args.dataset_name[0] + '/train/train_action_word.txt', 'rb') as f:
@@ -915,7 +905,6 @@ if __name__ == '__main__':
     args.parallel = torch.cuda.device_count() > 1
 
     trainer = Trainer(args)
-
     trainer.main()
 
 

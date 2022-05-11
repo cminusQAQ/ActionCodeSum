@@ -302,7 +302,6 @@ class Transformer(nn.Module):
     def __init__(self, args, tgt_dict):
         """"Constructor of the class."""
         super(Transformer, self).__init__()
-
         self.name = 'Transformer'
         if len(args.max_relative_pos) != args.nlayers:
             assert len(args.max_relative_pos) == 1

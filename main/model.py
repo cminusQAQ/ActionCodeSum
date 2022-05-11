@@ -60,25 +60,10 @@ class ArgumentWordGenerate(nn.Module):
     def forward(self, ex):
         code_word_rep = ex['code_word_rep'].to(self.device)
         code_len = ex['code_len'].to(self.device)
-        # for i in range(ex['tgt_argument_word'].shape[0]):
-        #     # print(ex['tgt_argument_word'])
-        #     print(self.argument_word_map[ex['tgt_argument_word'][i].item()], end=' ')
-        #     print(ex['summ_tokens'][i])
         code_rep = self.embedder(code_word_rep)
         a, b = self.rnn(code_rep)
         p = self.classification(torch.cat((b[0], b[1]), dim=1))
         loss = self.criterion(p, ex['tgt_argument_word'].to(self.device))
-    # if not self.training:
-        # with open('test.txt', 'a+') as f:
-        #     for indx, s in enumerate(ex['summ_tokens']):
-        #         print('tgt: ', end=' ', file=f)
-        #         print(self.argument_word_map[ex['tgt_argument_word'][indx].item()], end=' ', file=f)
-        #         print('\nsrc: ', end=' ', file=f)
-        #         value, index = p[indx].topk(3, dim=0, largest=True, sorted=True)
-        #         for i, j in zip(value, index):
-        #             print(self.argument_word_map[j.item()], ':', i.item(), end=' ', file=f)
-        #         print('\n', file=f)
-
         return p, loss
 
 

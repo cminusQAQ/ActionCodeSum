@@ -50,9 +50,7 @@ def vectorize(ex, model):
     vectorized_ex['use_src_char'] = model.args.use_src_char
     vectorized_ex['use_tgt_char'] = model.args.use_tgt_char
     vectorized_ex['use_code_type'] = model.args.use_code_type
-    vectorized_ex['tgt_action_word'] = ex['tgt_action_word']
-    vectorized_ex['tgt_argument_word'] = ex['tgt_argument_word']
-    
+
     return vectorized_ex
 
 
@@ -79,14 +77,6 @@ def batchify(batch):
     if use_src_char:
         max_char_in_code_token = code_chars[0].size(1)
 
-    # action word tenor
-    tgt_action_word = torch.zeros(batch_size, dtype=torch.long)
-    for ind, ex in enumerate(batch):
-        tgt_action_word[ind] = ex['tgt_action_word']
-    # argument word tenor
-    tgt_argument_word = torch.zeros(batch_size, dtype=torch.long)
-    for ind, ex in enumerate(batch):
-        tgt_argument_word[ind] = ex['tgt_argument_word']
     # Batch Code Representations
     code_len_rep = torch.zeros(batch_size, dtype=torch.long)
     code_word_rep = torch.zeros(batch_size, max_code_len, dtype=torch.long) \
@@ -154,8 +144,6 @@ def batchify(batch):
             target = batch[i]['summ_tokens']
             align_mask = torch.LongTensor([src_vocabs[i][w] for w in target])
             alignments.append(align_mask)
-    
-
 
     return {
         'ids': ids,
@@ -177,7 +165,5 @@ def batchify(batch):
         'src_vocab': src_vocabs,
         'src_map': source_maps,
         'alignment': alignments,
-        'stype': [ex['stype'] for ex in batch],
-        'tgt_action_word': tgt_action_word,
-        'tgt_argument_word': tgt_argument_word
+        'stype': [ex['stype'] for ex in batch]
     }
