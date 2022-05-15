@@ -31,8 +31,8 @@ from c2nl.eval.bleu import compute_bleu
 
 from preprocession import get_action_word_list, get_h_act, get_argument_word_list, get_h_argument
 # from main.model import SummarizationGenerator
-#from main.transformer import SummarizationGenerator
-from main.qwq import SummarizationGenerator
+from main.transformer import SummarizationGenerator
+#from main.qwq import SummarizationGenerator
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def str2bool(v):
@@ -428,7 +428,6 @@ class Trainer:
             if self.args.ctype != 'seq2seq':
                 loss_vh_collect.append(loss_vh.item())
                 loss_ag_collect.append(loss_ag.item())
-
             if step % 100 == 0 and step != 0:
                 end = time.time()
                 self.logger.info(
@@ -461,8 +460,8 @@ class Trainer:
                     with open('text.txt', 'w+') as f:
                         print('test: ', i, file=f)
                         print('truth:', j, file=f)
-                bleu = compute_bleu([lab], [pred], smooth=True)[0]
-                bl_total.append(bleu)
+                    bleu = compute_bleu([[i.split()]], [j.split()], smooth=True)[0]
+                    bl_total.append(bleu)
                 # rouge = ROUGE()
                 # rg, _ = rouge.calculate_scores(ground_truth=lab, predict=pred)
                 # rg_total.append(rg)
@@ -537,7 +536,7 @@ class Trainer:
         #self.load_pretrain_generator(epoch=33, save_dir=self.args.model_dir, name="python-ag-aw")
         for epoch in range(1, self.args.generator_pretrain_epoch):
             self.pretrain_generator(dataloader=train_loader, epoch=epoch,
-                            lr=self.args.learning_rate)
+                            lr=0.00001)
             res = self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
             if best_bleu < res:
 
@@ -778,7 +777,7 @@ class Trainer:
         start_epoch = 1
         self.init_from_scratch(train_exs, dev_exs)
 
-        self.generator_optimizer = optim.Adam(self.generator.network.parameters(), lr=self.args.learning_rate)
+        self.generator_optimizer = optim.Adam(self.generator.network.parameters(), lr=0.0001)
         # print(self.generator.parameters())
         # self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
 
@@ -899,6 +898,10 @@ if __name__ == '__main__':
     config.add_model_args(parser)
     args = parser.parse_args()
     set_defaults(args)
+
+    np.random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    torch.cuda.manual_seed(args.random_seed)
 
     # Set cuda
     args.cuda = torch.cuda.is_available()

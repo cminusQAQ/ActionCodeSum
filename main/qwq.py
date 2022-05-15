@@ -261,7 +261,6 @@ class SummarizationGenerator(object):
                 if self.args.uncase:
                     predictions[i] = predictions[i].lower()
 
-        targets = [summ for summ in ex['summ_text']]
         return predictions
 
     # --------------------------------------------------------------------------
