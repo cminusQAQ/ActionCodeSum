@@ -1,6 +1,7 @@
 # src: https://github.com/facebookresearch/DrQA/blob/master/scripts/reader/train.py
 
 import sys
+from main.discriminator import Discriminator
 
 from preprocession import get_action_word, get_argument_word
 
@@ -325,16 +326,19 @@ class Trainer:
                 self.argument_word_map[size] = w
                 size += 1
         self.argument_word_re = get_argument_word_list(self.argument_word_map, self.tgt_dict)
-        self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict)
+        #self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict)
+        self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict,
+                                self.action_word_re, 
+                                self.action_word_map, 
+                                self.argument_word_re,
+                                self.argument_word_map,
+                                self.args.ctype, device, 1).to(device)
 
-        # for name, param in self.generator.named_parameters():
-        #     if 'weight' in name:
-        #         nn.init.orthogonal(param)
+        for name, param in self.generator.named_parameters():
+            if 'weight' in name and param.requires_grad and len(param.shape) > 2:
+                nn.init.orthogonal(param)
         
-        # self.discriminator = Discriminator(config.get_model_args(self.args), 1, device).to(device)
-        # for name, param in self.discriminator.named_parameters():
-        #     if 'weight' in name:
-        #         nn.init.orthogonal(param)
+        self.discriminator = Discriminator(config.get_model_args(self.args), 1, device).to(device)
 
         
     def save_generator(self, save_dir, epoch):
@@ -414,10 +418,13 @@ class Trainer:
         loss_vh_collect = []
 
         for step, data in enumerate(dataloader):
-        
-            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator.update(data)
+            if self.args.optimizer in ['sgd', 'adam'] and epoch <= 1:
+                cur_lrate = (self.args.learning_rate / len(dataloader)) * step
+                for param_group in self.generator_optimizer.param_groups:
+                    param_group['lr'] = cur_lrate
+            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data)
 
-            loss = loss_lm
+            loss = loss_lm + loss_vh * 0.1 + loss_ag * 0.1
             self.generator_optimizer.zero_grad()
             loss.backward()
 
@@ -454,14 +461,19 @@ class Trainer:
         with torch.no_grad():
             pbar = tqdm(data_loader)
             for idx, ex in enumerate(pbar):
-                pred = self.generator.predict(ex, replace_unk=True)
+                pred, act, ag = self.generator.predict(ex, replace_unk=True)
                 lab = self.constring(ex['summ_tokens'])
-                for i, j in zip(pred, lab):
-                    with open('text.txt', 'w+') as f:
-                        print('test: ', i, file=f)
-                        print('truth:', j, file=f)
+                for (ind, i), j in zip(enumerate(pred), lab):
+                    if epoch >= 20:
+                        with open('text' + str(epoch), 'a+') as f:
+                            print('test: ', i, file=f)
+                            print('truth:', j, file=f)
+                            print('test: ', act[ind], ' ', ag[ind], file=f)
+                            print('truth: ', self.action_word_map[ex['tgt_action_word'][ind].item()], ' ', self.argument_word_map[ex['tgt_argument_word'][ind].item()], file=f)
+                            print('', file=f)
                     bleu = compute_bleu([[i.split()]], [j.split()], smooth=True)[0]
                     bl_total.append(bleu)
+                pbar.set_description("%s" % 'BLEU = %.4f [validating ... ]' % (np.mean(bl_total) * 100))
                 # rouge = ROUGE()
                 # rg, _ = rouge.calculate_scores(ground_truth=lab, predict=pred)
                 # rg_total.append(rg)
@@ -536,7 +548,7 @@ class Trainer:
         #self.load_pretrain_generator(epoch=33, save_dir=self.args.model_dir, name="python-ag-aw")
         for epoch in range(1, self.args.generator_pretrain_epoch):
             self.pretrain_generator(dataloader=train_loader, epoch=epoch,
-                            lr=0.00001)
+                            lr=self.args.learning_rate)
             res = self.evaluate_generator(dev_loader, 'dev', epoch=epoch)
             if best_bleu < res:
 
@@ -777,7 +789,7 @@ class Trainer:
         start_epoch = 1
         self.init_from_scratch(train_exs, dev_exs)
 
-        self.generator_optimizer = optim.Adam(self.generator.network.parameters(), lr=0.0001)
+        self.generator_optimizer = optim.Adam(self.generator.parameters(), lr=self.args.learning_rate)
         # print(self.generator.parameters())
         # self.discriminator_optimizer = optim.Adam(self.discriminator.parameters(), lr=1e-3)
 

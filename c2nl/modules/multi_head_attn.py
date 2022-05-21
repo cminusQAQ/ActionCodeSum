@@ -108,7 +108,9 @@ class MultiHeadedAttention(nn.Module):
         #    aeq(k_len_, k_len)
         #    aeq(q_len_ == q_len)
         # END CHECKS
-
+        # print(key.shape)
+        # print(value.shape)
+        # print(query.shape)
         batch_size = key.size(0)
         head_count = self.head_count
         key_len = key.size(1)
@@ -177,7 +179,10 @@ class MultiHeadedAttention(nn.Module):
         query = query / math.sqrt(self.d_k)
         # batch x num_heads x query_len x key_len
         query_key = torch.matmul(query, key.transpose(2, 3))
-
+        # print('key', query_key.shape)
+        # print('query', query.shape)
+        # print(relations_keys.shape)
+        # print('qwq', relative_matmul(query, relations_keys, True).shape)
         if self.max_relative_positions > 0 and attn_type == "self":
             scores = query_key + relative_matmul(query, relations_keys, True)
         else:

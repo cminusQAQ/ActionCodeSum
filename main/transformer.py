@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from c2nl.models.transformer import Embedder, Transformer, Encoder
+from c2nl.models.transformer import Embedder, Transformer, SingleEncoder
 
 from c2nl.utils.copy_utils import align, collapse_copy_scores, make_src_map, replace_unknown
 from c2nl.utils.misc import tens2sen
@@ -18,24 +18,20 @@ class ActionWordGenerate(nn.Module):
             assert len(args.max_relative_pos) == 1
             args.max_relative_pos = args.max_relative_pos * args.nlayers
         self.embedder = Embedder(args)
-        self.encoder = Encoder(args, self.embedder.enc_input_size)
-        self.classification = nn.Linear(args.nhid, len(action_word_map) // 2)
-        self.sig = nn.Sigmoid()
+        self.encoder = SingleEncoder(args, self.embedder.enc_input_size)
+        self.classification = nn.Linear(args.emsize, len(action_word_map) // 2)
         self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, ex):
-        code_word_rep = ex['code_word_rep'].to(self.device)
-        code_len = ex['code_len'].to(self.device)
-        # for i in range(ex['tgt_action_word'].shape[0]):
-        #     # print(ex['tgt_action_word'])
-        #     print(self.action_word_map[ex['tgt_action_word'][i].item()], end=' ')
-        #     print(ex['summ_tokens'][i])
+    def forward(self, code_word_rep, code_len, tgt_action_word):
         code_rep = self.embedder(code_word_rep, None, None, mode='encoder')
         a, b = self.encoder(code_rep, code_len)
-        p = self.classification(a[:,-1,:], dim=1)
-        loss = self.criterion(p, ex['tgt_action_word'].to(self.device))
+        # print(code_rep.shape)
+        # print(a.shape, len(b))
+        # assert 0
+        a = self.classification(a[:,-1,:])
+        loss = self.criterion(a, tgt_action_word)
 
-        return p, loss
+        return a.detach(), loss
 
 class ArgumentWordGenerate(nn.Module):
     def __init__(self, args, argument_word_map, device):
@@ -48,19 +44,17 @@ class ArgumentWordGenerate(nn.Module):
             assert len(args.max_relative_pos) == 1
             args.max_relative_pos = args.max_relative_pos * args.nlayers
         self.embedder = Embedder(args)
-        self.encoder = Encoder(args, self.embedder.enc_input_size)
-        self.classification = nn.Linear(args.nhid, len(argument_word_map) // 2)
-        self.sig = nn.Sigmoid()
+        self.encoder = SingleEncoder(args, self.embedder.enc_input_size)
+        self.classification = nn.Linear(args.emsize, len(argument_word_map) // 2)
         self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, ex):
-        code_word_rep = ex['code_word_rep'].to(self.device)
-        code_len = ex['code_len'].to(self.device)
+    def forward(self, code_word_rep, code_len, tgt_argument_word):
         code_rep = self.embedder(code_word_rep, None, None, mode='encoder')
         a, b = self.encoder(code_rep, code_len)
-        p = self.classification(a[:,-1,:], dim=1)
-        loss = self.criterion(p, ex['tgt_argument_word'].to(self.device))
-        return p, loss
+        a = self.classification(a[:,-1,:])
+        loss = self.criterion(a, tgt_argument_word)
+        # TODO:
+        return a.detach(), loss
 
 class SummarizationGenerator(nn.Module):
     def __init__(self, args, src_dict, tgt_dict, action_word_re, action_word_map, argument_word_re, argument_word_map, type, device, re_act_size) -> None:
@@ -69,6 +63,8 @@ class SummarizationGenerator(nn.Module):
         self.type = type
         self.parallel = False
         self.use_cuda = device
+        self.args.use_cuda = device
+        self.device = device
         self.action_word_re = action_word_re
         self.argument_word_re = argument_word_re
         self.src_dict = src_dict
@@ -80,7 +76,7 @@ class SummarizationGenerator(nn.Module):
         if self.type != 'seq2seq':
             self.word_pred = ActionWordGenerate(args, action_word_map, device)
             self.argument_pred = ArgumentWordGenerate(args, argument_word_map, device)
-        
+            self.embedder = Embedder(args)
         self.network = Transformer(self.args, tgt_dict)
 
     def forward(self, ex, teacher_forcing_ratio=0.5, sampling=False, beam_search=False):
@@ -96,46 +92,50 @@ class SummarizationGenerator(nn.Module):
                 
         '''
 
-        code_word_rep = ex['code_word_rep']
-        code_len = ex['code_len']
-        summ_word_rep = ex['summ_word_rep']
-        summ_len = ex['summ_len']
-        code_char_rep = ex['code_char_rep']
-        code_type_rep = ex['code_type_rep']
+        code_word_rep = ex['code_word_rep'].to(self.use_cuda)
+        code_len = ex['code_len'].to(self.use_cuda)
+        summ_word_rep = ex['summ_word_rep'].to(self.use_cuda)
+        summ_len = ex['summ_len'].to(self.use_cuda)
+        code_char_rep = None
+        code_type_rep = None
         code_mask_rep = ex['code_mask_rep']
         summ_char_rep = ex['summ_char_rep']
-        tgt_seq = ex['tgt_seq']
+        tgt_seq = ex['tgt_seq'].to(self.use_cuda)
+        tgt_action_word = ex['tgt_action_word'].to(self.use_cuda)
+        tgt_argument_word = ex['tgt_argument_word'].to(self.use_cuda)
 
         if any(l is None for l in ex['language']):
             ex_weights = None
         else:
             ex_weights = [self.args.dataset_weights[lang] for lang in ex['language']]
-            ex_weights = torch.FloatTensor(ex_weights)
+            ex_weights = torch.FloatTensor(ex_weights).to(self.use_cuda)
 
         batch_size = code_word_rep.shape[0]
         h_act = None
+        emb_act = None
         loss_act = 0
         h_ag = None
+        emb_ag = None
         loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
-            p, loss_act = self.word_pred(ex)
+            p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
             h_act = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
             value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
             index = index.tolist()
-            for i in range(batch_size): 
+            for i in range(batch_size):
                 for j in range(self.re_act_size):
                     h_act[i][j] = self.action_word_re[index[i][j]]
-            emb_act = self.decoder_embedder(h_act)
+            emb_act = self.embedder(h_act, None, None, mode='decoder')
 
-            p, loss_ag = self.argument_pred(ex)
+            p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
             h_ag = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
             value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
             index = index.tolist()
             for i in range(batch_size):
                 for j in range(self.re_act_size):
                     h_ag[i][j] = self.argument_word_re[index[i][j]]
-            emb_ag = self.decoder_embedder(h_ag)
+            emb_ag = self.embedder(h_act, None, None, mode='decoder')
         
         source_map, alignment = None, None
         blank, fill = None, None
@@ -152,25 +152,6 @@ class SummarizationGenerator(nn.Module):
                 else alignment
 
             blank, fill = collapse_copy_scores(self.tgt_dict, ex['src_vocab'])
-
-        if self.use_cuda:
-            code_len = code_len.cuda(non_blocking=True)
-            summ_len = summ_len.cuda(non_blocking=True)
-            tgt_seq = tgt_seq.cuda(non_blocking=True)
-            if code_word_rep is not None:
-                code_word_rep = code_word_rep.cuda(non_blocking=True)
-            if code_char_rep is not None:
-                code_char_rep = code_char_rep.cuda(non_blocking=True)
-            if code_type_rep is not None:
-                code_type_rep = code_type_rep.cuda(non_blocking=True)
-            if code_mask_rep is not None:
-                code_mask_rep = code_mask_rep.cuda(non_blocking=True)
-            if summ_word_rep is not None:
-                summ_word_rep = summ_word_rep.cuda(non_blocking=True)
-            if summ_char_rep is not None:
-                summ_char_rep = summ_char_rep.cuda(non_blocking=True)
-            if ex_weights is not None:
-                ex_weights = ex_weights.cuda(non_blocking=True)
 
         # Run forward
         net_loss = self.network(code_word_rep=code_word_rep,
@@ -190,51 +171,48 @@ class SummarizationGenerator(nn.Module):
                                 fill=fill,
                                 source_vocab=ex['src_vocab'],
                                 code_mask_rep=code_mask_rep,
-                                example_weights=ex_weights)      
+                                example_weights=ex_weights,
+                                action_word_emb=emb_act,
+                                argument_word_emb=emb_ag,
+                                )
         loss = net_loss['ml_loss']
         return loss, None, h_act, loss_act, h_ag, loss_ag
 
     def predict(self, ex, replace_unk=False):
-        code_word_rep = ex['code_word_rep']
-        code_len = ex['code_len']
+        code_word_rep = ex['code_word_rep'].to(self.use_cuda)
+        code_len = ex['code_len'].to(self.use_cuda)
         code_char_rep = ex['code_char_rep']
         code_type_rep = ex['code_type_rep']
         code_mask_rep = ex['code_mask_rep']
-        if self.use_cuda:
-            code_len = code_len.cuda(non_blocking=True)
-            if code_word_rep is not None:
-                code_word_rep = code_word_rep.cuda(non_blocking=True)
-            if code_char_rep is not None:
-                code_char_rep = code_char_rep.cuda(non_blocking=True)
-            if code_type_rep is not None:
-                code_type_rep = code_type_rep.cuda(non_blocking=True)
-            if code_mask_rep is not None:
-                code_mask_rep = code_mask_rep.cuda(non_blocking=True)
+        tgt_action_word = ex['tgt_action_word'].to(self.use_cuda)
+        tgt_argument_word = ex['tgt_argument_word'].to(self.use_cuda)
 
         batch_size = code_word_rep.shape[0]
         h_act = None
+        emb_act = None
         loss_act = 0
         h_ag = None
+        emb_ag = None
         loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
-            p, loss_act = self.word_pred(ex)
+            p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
             h_act = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
             value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
             index = index.tolist()
             for i in range(batch_size): 
                 for j in range(self.re_act_size):
                     h_act[i][j] = self.action_word_re[index[i][j]]
-            emb_act = self.decoder_embedder(h_act)
+            emb_act = self.embedder(h_act, None, None, mode='decoder')
 
-            p, loss_ag = self.argument_pred(ex)
+            p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
             h_ag = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
             value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
             index = index.tolist()
             for i in range(batch_size):
                 for j in range(self.re_act_size):
                     h_ag[i][j] = self.argument_word_re[index[i][j]]
-            emb_ag = self.decoder_embedder(h_ag)
+            emb_ag = self.embedder(h_act, None, None, mode='decoder')
                 
         
         source_map, alignment = None, None
@@ -264,11 +242,21 @@ class SummarizationGenerator(nn.Module):
                                    tgt_dict=self.tgt_dict,
                                    blank=blank, fill=fill,
                                    source_vocab=ex['src_vocab'],
-                                   code_mask_rep=code_mask_rep)
+                                   code_mask_rep=code_mask_rep,
+                                   action_word_emb=emb_act,
+                                   argument_word_emb=emb_ag,
+                                   )
 
         predictions = tens2sen(decoder_out['predictions'],
                                self.tgt_dict,
                                ex['src_vocab'])
+        if self.type != 'seq2seq':
+            act = tens2sen(h_act, self.tgt_dict, ex['src_vocab'])
+            ag = tens2sen(h_ag, self.tgt_dict, ex['src_vocab'])
+        else:
+            act = None
+            ag = None
+        
         if replace_unk:
             for i in range(len(predictions)):
                 enc_dec_attn = decoder_out['attentions'][i]
@@ -281,6 +269,6 @@ class SummarizationGenerator(nn.Module):
                 if self.args.uncase:
                     predictions[i] = predictions[i].lower()
 
-        return predictions
+        return predictions, act, ag
 
     
