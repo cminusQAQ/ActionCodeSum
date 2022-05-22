@@ -399,7 +399,7 @@ class Transformer(nn.Module):
         # [b, len, h] [b, len+1, h] [b, len+1, h]
         key = torch.cat((memory_bank, action_memory_bank, argument_memory_bank), dim=1)
         val = key.clone()
-        attn = torch.matmul(torch.matmul(query, key.transpose(1, 2)), val)
+        attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
         memory_bank = self.ln(attn)
         
         # embed and encode the target sequence
@@ -649,7 +649,7 @@ class Transformer(nn.Module):
         # [b, len, h] [b, len+1, h] [b, len+1, h]
         key = torch.cat((memory_bank, action_memory_bank, argument_memory_bank), dim=1)
         val = key.clone()
-        attn = torch.matmul(torch.matmul(query, key.transpose(1, 2)), val)
+        attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
         memory_bank = self.ln(attn)
 
         params = dict()
