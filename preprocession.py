@@ -5,64 +5,72 @@ import pickle
 import torch
 import spacy
 
-nlp = spacy.load("en_core_web_sm")
-def get_action_word(s, action_word_map):
-    tgt = torch.zeros(1)
-    for i in range(1, 3):
-        if s[i] in action_word_map:
-            tgt[0] = action_word_map[s[i]]
-    return tgt
-
-def get_argument_word(s, argument_word_map):
-    tgt = torch.zeros(1)
-    for i in range(1, 3):
-        if s[i] in argument_word_map:
-            tgt[0] = argument_word_map[s[i]]
-    return tgt
-
-def get_action_word_list(vocab, tgt_dict):
-    mp = {}
-    for key in vocab:
-        mp[vocab[key]] = tgt_dict[key]
-    return mp
-
-def get_argument_word_list(vocab, tgt_dict):
-    mp = {}
-    for key in vocab:
-        mp[vocab[key]] = tgt_dict[key]
-    return mp
-
-def get_h_act(l, action_word_map, action_word_re, size, device):
-    p = torch.zeros(len(l), size, dtype=torch.int64).to(device)
-    for indx, s in enumerate(l):
-        cnt = 0
-        for indy, i in enumerate(s):
-            if i in action_word_map:
-                p[indx][cnt] = action_word_re[action_word_map[i]] 
-                cnt += 1
-                if cnt == size:
-                    break
-            if indy >= 3:
+class qwq:
+    def __init__(self):
+        self.nlp = spacy.load("en_core_web_sm")
+    def get_action_word(self, s, action_word_map):
+        tgt = torch.zeros(1)
+        for i in range(1, 3):
+            if s[i] in action_word_map:
+                tgt[0] = action_word_map[s[i]]
                 break
-        for indy in range(cnt, size):
-            p[indx][indy] = 0
-    return p
+        return tgt
 
-def get_h_argument(l, argument_word_map, argument_word_re, size, device):
-    p = torch.zeros(len(l), size, dtype=torch.int64).to(device)
-    for indx, s in enumerate(l):
-        cnt = 0
-        for indy, i in enumerate(s):
-            if i in argument_word_map:
-                p[indx][cnt] = argument_word_re[argument_word_map[i]] 
-                cnt += 1
-                if cnt == size:
+    def get_argument_word(self, s, argument_word_map):
+        qwq = s[1:-1]
+        s = ''
+        for i in qwq:
+            s += i + ' '
+        s = self.nlp(s)
+        tgt = torch.zeros(1)
+        for i in range(1, min(5, len(s))):
+            if s[i].text in argument_word_map and s[i].tag_[:2] == 'NN':
+                tgt[0] = argument_word_map[s[i].text]
+        return tgt
+
+    def get_action_word_list(self, vocab, tgt_dict):
+        mp = {}
+        for key in vocab:
+            mp[vocab[key]] = tgt_dict[key]
+        return mp
+
+    def get_argument_word_list(self, vocab, tgt_dict):
+        mp = {}
+        for key in vocab:
+            mp[vocab[key]] = tgt_dict[key]
+        return mp
+
+    def get_h_act(self, l, action_word_map, action_word_re, size, device):
+        p = torch.zeros(len(l), size, dtype=torch.int64).to(device)
+        for indx, s in enumerate(l):
+            cnt = 0
+            for indy, i in enumerate(s):
+                if i in action_word_map:
+                    p[indx][cnt] = action_word_re[action_word_map[i]] 
+                    cnt += 1
+                    if cnt == size:
+                        break
+                if indy >= 3:
                     break
-            if indy >= 3:
-                break
-        for indy in range(cnt, size):
-            p[indx][indy] = 0
-    return p
+            for indy in range(cnt, size):
+                p[indx][indy] = 0
+        return p
+
+    def get_h_argument(self, l, argument_word_map, argument_word_re, size, device):
+        p = torch.zeros(len(l), size, dtype=torch.int64).to(device)
+        for indx, s in enumerate(l):
+            cnt = 0
+            for indy, i in enumerate(s):
+                if i in argument_word_map:
+                    p[indx][cnt] = argument_word_re[argument_word_map[i]] 
+                    cnt += 1
+                    if cnt == size:
+                        break
+                if indy >= 3:
+                    break
+            for indy in range(cnt, size):
+                p[indx][indy] = 0
+        return p
 
 if __name__ == '__main__':
 

@@ -48,7 +48,7 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --ctype generator_only \
 --share_decoder_embeddings True \
 --max_examples -1 \
---batch_size 16 \
+--batch_size 32 \
 --test_batch_size 64 \
 --num_epochs 200 \
 --model_type transformer \
@@ -68,7 +68,7 @@ PYTHONPATH=$SRC_DIR CUDA_VISIBLE_DEVICES=$RGPU python -W ignore ${SRC_DIR}/main/
 --early_stop 20 \
 --warmup_steps 0 \
 --optimizer adam \
---learning_rate 0.00007 \
+--learning_rate 0.0001 \
 --lr_decay 0.99 \
 --valid_metric bleu \
 --checkpoint False \

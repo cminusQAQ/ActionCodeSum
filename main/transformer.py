@@ -74,12 +74,12 @@ class SummarizationGenerator(nn.Module):
         self.action_word_map = action_word_map
         self.re_act_size = re_act_size
         if self.type != 'seq2seq':
-            self.word_pred = ActionWordGenerate(args, action_word_map, device)
-            self.argument_pred = ArgumentWordGenerate(args, argument_word_map, device)
+            # self.word_pred = ActionWordGenerate(args, action_word_map, device)
+            # self.argument_pred = ArgumentWordGenerate(args, argument_word_map, device)
             self.embedder = Embedder(args)
         self.network = Transformer(self.args, tgt_dict)
 
-    def forward(self, ex, teacher_forcing_ratio=0.5, sampling=False, beam_search=False):
+    def forward(self, ex, teacher_forcing_ratio=0.5, sampling=False, beam_search=False, epoch=-1):
         '''
             Output:
                 if sampling:
@@ -119,23 +119,25 @@ class SummarizationGenerator(nn.Module):
         loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
-            p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
+            # p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
             h_act = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
-            value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
-            index = index.tolist()
+            # value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
+            # index = index.tolist()
             for i in range(batch_size):
                 for j in range(self.re_act_size):
-                    h_act[i][j] = self.action_word_re[index[i][j]]
-            emb_act = self.embedder(h_act, None, None, mode='decoder')
+                    #h_act[i][j] = self.action_word_re[index[i][j]]
+                    h_act[i][j] = self.action_word_re[tgt_action_word[i].item()]
+            emb_act = self.embedder(h_act, None, None, mode='encoder')
 
-            p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
+            # p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
             h_ag = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
-            value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
-            index = index.tolist()
+            # value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
+            # index = index.tolist()
             for i in range(batch_size):
                 for j in range(self.re_act_size):
-                    h_ag[i][j] = self.argument_word_re[index[i][j]]
-            emb_ag = self.embedder(h_act, None, None, mode='decoder')
+                    #h_ag[i][j] = self.argument_word_re[index[i][j]]
+                    h_ag[i][j] = self.argument_word_re[tgt_argument_word[i].item()]
+            emb_ag = self.embedder(h_ag, None, None, mode='encoder')
         
         source_map, alignment = None, None
         blank, fill = None, None
@@ -174,6 +176,7 @@ class SummarizationGenerator(nn.Module):
                                 example_weights=ex_weights,
                                 action_word_emb=emb_act,
                                 argument_word_emb=emb_ag,
+                                epoch=epoch,
                                 )
         loss = net_loss['ml_loss']
         return loss, None, h_act, loss_act, h_ag, loss_ag
@@ -196,23 +199,25 @@ class SummarizationGenerator(nn.Module):
         loss_ag = 0
         # Run forward
         if self.type != 'seq2seq':
-            p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
+            # p, loss_act = self.word_pred(code_word_rep, code_len, tgt_action_word)
             h_act = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
-            value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
-            index = index.tolist()
-            for i in range(batch_size): 
-                for j in range(self.re_act_size):
-                    h_act[i][j] = self.action_word_re[index[i][j]]
-            emb_act = self.embedder(h_act, None, None, mode='decoder')
-
-            p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
-            h_ag = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
-            value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
-            index = index.tolist()
+            # value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
+            # index = index.tolist()
             for i in range(batch_size):
                 for j in range(self.re_act_size):
-                    h_ag[i][j] = self.argument_word_re[index[i][j]]
-            emb_ag = self.embedder(h_act, None, None, mode='decoder')
+                    #h_act[i][j] = self.action_word_re[index[i][j]]
+                    h_act[i][j] = self.action_word_re[tgt_action_word[i].item()]
+            emb_act = self.embedder(h_act, None, None, mode='encoder')
+
+            # p, loss_ag = self.argument_pred(code_word_rep, code_len, tgt_argument_word)
+            h_ag = torch.zeros(batch_size, self.re_act_size, dtype=torch.int64).to(self.device)
+            # value, index = p.topk(self.re_act_size, dim=1, largest=True, sorted=True)
+            # index = index.tolist()
+            for i in range(batch_size):
+                for j in range(self.re_act_size):
+                    #h_ag[i][j] = self.argument_word_re[index[i][j]]
+                    h_ag[i][j] = self.argument_word_re[tgt_argument_word[i].item()]
+            emb_ag = self.embedder(h_ag, None, None, mode='encoder')
                 
         
         source_map, alignment = None, None

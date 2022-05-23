@@ -351,7 +351,10 @@ class Transformer(nn.Module):
         self.encoder = SingleEncoder(args, self.embedder.enc_input_size)
         self.decoder = Decoder(args, self.embedder.dec_input_size)
         self.layer_wise_attn = args.layer_wise_attn
-        self.ln = nn.Linear(args.emsize, args.emsize)
+        self.key = nn.Linear(args.emsize, args.d_k)
+        self.val = nn.Linear(args.emsize, args.d_v)
+        self.query = nn.Linear(args.emsize, args.d_k)
+        self.ln = nn.Linear(args.d_k, args.emsize)
 
         self.generator = nn.Linear(self.decoder.input_size, args.tgt_vocab_size)
         if args.share_decoder_embeddings:
@@ -384,6 +387,7 @@ class Transformer(nn.Module):
                         alignment,
                         action_word_emb=None,
                         argument_word_emb=None,
+                        epoch=-1,
                         **kwargs):
 
         batch_size = code_len.size(0)
@@ -395,12 +399,13 @@ class Transformer(nn.Module):
         memory_bank, layer_wise_outputs = self.encoder(code_rep, code_len)  # B x seq_len x h
         action_memory_bank, _ = self.encoder(action_word_emb, torch.ones(batch_size).to(self.args.use_cuda))
         argument_memory_bank, _ = self.encoder(action_word_emb, torch.ones(batch_size).to(self.args.use_cuda))
-        query = memory_bank.clone()
         # [b, len, h] [b, len+1, h] [b, len+1, h]
-        key = torch.cat((memory_bank, action_memory_bank, argument_memory_bank), dim=1)
-        val = key.clone()
-        attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
-        memory_bank = self.ln(attn)
+        if epoch >= 10:
+            query = self.query(memory_bank.clone())
+            key = self.key(torch.cat((action_memory_bank, argument_memory_bank, memory_bank), dim=1))
+            val = self.val(torch.cat((action_memory_bank, argument_memory_bank, memory_bank), dim=1))
+            attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
+            memory_bank = self.ln(attn)
         
         # embed and encode the target sequence
         summ_emb = self.embedder(summ_word_rep,
@@ -461,6 +466,7 @@ class Transformer(nn.Module):
                 alignment,
                 action_word_emb=None,
                 argument_word_emb=None,
+                epoch=-1,
                 **kwargs):
         """
         Input:
@@ -635,6 +641,7 @@ class Transformer(nn.Module):
                alignment,
                action_word_emb=None,
                argument_word_emb=None,
+               epoch=-1,
                **kwargs):
 
         word_rep = self.embedder(code_word_rep,
@@ -645,12 +652,13 @@ class Transformer(nn.Module):
         memory_bank, layer_wise_outputs = self.encoder(word_rep, code_len)  # B x seq_len x h
         action_memory_bank, _ = self.encoder(action_word_emb, torch.ones(batch_size).to(self.args.use_cuda))
         argument_memory_bank, _ = self.encoder(action_word_emb, torch.ones(batch_size).to(self.args.use_cuda))
-        query = memory_bank.clone()
         # [b, len, h] [b, len+1, h] [b, len+1, h]
-        key = torch.cat((memory_bank, action_memory_bank, argument_memory_bank), dim=1)
-        val = key.clone()
-        attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
-        memory_bank = self.ln(attn)
+        if epoch >= 10:
+            query = self.query(memory_bank.clone())
+            key = self.key(torch.cat((action_memory_bank, argument_memory_bank, memory_bank), dim=1))
+            val = self.val(torch.cat((action_memory_bank, argument_memory_bank, memory_bank), dim=1))
+            attn = torch.matmul(torch.softmax(torch.matmul(query, key.transpose(1, 2)), -1), val)
+            memory_bank = self.ln(attn)
 
         params = dict()
         params['memory_bank'] = memory_bank

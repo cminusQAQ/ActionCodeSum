@@ -3,8 +3,6 @@
 import sys
 from main.discriminator import Discriminator
 
-from preprocession import get_action_word, get_argument_word
-
 sys.path.append(".")
 sys.path.append("..")
 
@@ -30,7 +28,7 @@ import c2nl.inputters.vector as vector
 import c2nl.inputters.dataset as data
 from c2nl.eval.bleu import compute_bleu
 
-from preprocession import get_action_word_list, get_h_act, get_argument_word_list, get_h_argument
+from preprocession import qwq
 # from main.model import SummarizationGenerator
 from main.transformer import SummarizationGenerator
 #from main.qwq import SummarizationGenerator
@@ -266,6 +264,7 @@ class Trainer:
             logfile.setFormatter(fmt)
             self.logger.addHandler(logfile)
         self.logger.info('COMMAND: %s' % ' '.join(sys.argv))
+        self.pre = qwq()
 
     def convert(self, tokens):
         pred = []
@@ -314,7 +313,7 @@ class Trainer:
                 self.action_word_map[w] = size
                 self.action_word_map[size] = w
                 size += 1
-        self.action_word_re = get_action_word_list(self.action_word_map, self.tgt_dict)
+        self.action_word_re = self.pre.get_action_word_list(self.action_word_map, self.tgt_dict)
 
         with open(args.data_dir + args.dataset_name[0] + '/argument_vocab.txt', 'rb+') as f:
             argument_word_list = pickle.load(f)
@@ -325,7 +324,7 @@ class Trainer:
                 self.argument_word_map[w] = size
                 self.argument_word_map[size] = w
                 size += 1
-        self.argument_word_re = get_argument_word_list(self.argument_word_map, self.tgt_dict)
+        self.argument_word_re = self.pre.get_argument_word_list(self.argument_word_map, self.tgt_dict)
         #self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict)
         self.generator = SummarizationGenerator(config.get_model_args(self.args), self.src_dict, self.tgt_dict,
                                 self.action_word_re, 
@@ -422,7 +421,7 @@ class Trainer:
                 cur_lrate = (self.args.learning_rate / len(dataloader)) * step
                 for param_group in self.generator_optimizer.param_groups:
                     param_group['lr'] = cur_lrate
-            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data)
+            loss_lm, output, p_act, loss_vh, p_ag, loss_ag = self.generator(data, epoch=epoch)
 
             loss = loss_lm + loss_vh * 0.1 + loss_ag * 0.1
             self.generator_optimizer.zero_grad()
@@ -432,9 +431,9 @@ class Trainer:
             
             loss_generator_collect.append(loss.item())
             loss_lm_collect.append(loss_lm.item())
-            if self.args.ctype != 'seq2seq':
-                loss_vh_collect.append(loss_vh.item())
-                loss_ag_collect.append(loss_ag.item())
+            # if self.args.ctype != 'seq2seq':
+            #     loss_vh_collect.append(loss_vh.item())
+            #     loss_ag_collect.append(loss_ag.item())
             if step % 100 == 0 and step != 0:
                 end = time.time()
                 self.logger.info(
@@ -464,7 +463,7 @@ class Trainer:
                 pred, act, ag = self.generator.predict(ex, replace_unk=True)
                 lab = self.constring(ex['summ_tokens'])
                 for (ind, i), j in zip(enumerate(pred), lab):
-                    if epoch >= 20:
+                    if epoch >= 50:
                         with open('text' + str(epoch), 'a+') as f:
                             print('test: ', i, file=f)
                             print('truth:', j, file=f)
@@ -511,7 +510,7 @@ class Trainer:
             # sampled_results = logits.argmax(2)
             labels = torch.zeros(data['code_word_rep'].shape[0]).to(device)
             
-            p_act = get_h_act(data['summ_tokens'], self.action_word_map, self.action_word_re, 1, device)
+            p_act = self.pre.get_h_act(data['summ_tokens'], self.action_word_map, self.action_word_re, 1, device)
             loss_fake = self.discriminator(data['code_word_rep'].to(device),
                                             p_act, 
                                             data['summ_word_rep'].to(device),
@@ -666,7 +665,7 @@ class Trainer:
                 correct_fake += (pred == False).sum()
                 all_cnt_fake += pred.shape[0]
 
-                p_act = get_h_act(data['summ_tokens'], self.action_word_map, self.action_word_re, 1, device)
+                p_act = self.pre.get_h_act(data['summ_tokens'], self.action_word_map, self.action_word_re, 1, device)
                 logit = self.discriminator(data['code_word_rep'].to(device),
                                             p_act,
                                             data['code_word_rep'].to(device))
@@ -801,7 +800,7 @@ class Trainer:
         else:
             l = []
             for ind, j in enumerate(tqdm(train_exs)):
-                j['tgt_action_word'] = get_action_word(j['summary'].tokens, self.action_word_map)
+                j['tgt_action_word'] = self.pre.get_action_word(j['summary'].tokens, self.action_word_map)
                 l.append(j['tgt_action_word'])
             with open(self.args.data_dir + self.args.dataset_name[0] + '/train/train_action_word.txt', 'wb') as f:
                 pickle.dump(l, file=f)
@@ -814,7 +813,7 @@ class Trainer:
         else:
             l = []
             for ind, j in enumerate(tqdm(dev_exs)):
-                j['tgt_action_word'] = get_action_word(j['summary'].tokens, self.action_word_map)
+                j['tgt_action_word'] = self.pre.get_action_word(j['summary'].tokens, self.action_word_map)
                 l.append(j['tgt_action_word'])
             with open(self.args.data_dir + self.args.dataset_name[0] + '/dev/dev_action_word.txt', 'wb') as f:
                 pickle.dump(l, file=f)
@@ -827,7 +826,7 @@ class Trainer:
         else:
             l = []
             for ind, j in enumerate(tqdm(train_exs)):
-                j['tgt_argument_word'] = get_argument_word(j['summary'].tokens, self.argument_word_map)
+                j['tgt_argument_word'] = self.pre.get_argument_word(j['summary'].tokens, self.argument_word_map)
                 l.append(j['tgt_argument_word'])
             with open(self.args.data_dir + self.args.dataset_name[0] + '/train/train_argument.txt', 'wb') as f:
                 pickle.dump(l, file=f)
@@ -840,7 +839,7 @@ class Trainer:
         else:
             l = []
             for ind, j in enumerate(tqdm(dev_exs)):
-                j['tgt_argument_word'] = get_argument_word(j['summary'].tokens, self.argument_word_map)
+                j['tgt_argument_word'] = self.pre.get_argument_word(j['summary'].tokens, self.argument_word_map)
                 l.append(j['tgt_argument_word'])
             with open(self.args.data_dir + self.args.dataset_name[0] + '/dev/dev_argument_word.txt', 'wb') as f:
                 pickle.dump(l, file=f)
